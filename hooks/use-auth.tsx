@@ -148,4 +148,4 @@ export function useAuth() {
 }
 
 export type { StoredUser }
-export { USERS_KEY, readStorage, writeStorage, hashPassword }
+export { ADMIN_KEY, USERS_KEY, readStorage, writeStorage, hashPassword }

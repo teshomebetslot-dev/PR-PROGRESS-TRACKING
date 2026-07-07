@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { QUARTERS } from '@/lib/plan-data'
-import { useAuth, readStorage, USERS_KEY } from '@/hooks/use-auth'
+import { useAuth, readStorage, ADMIN_KEY, USERS_KEY } from '@/hooks/use-auth'
 import type { StoredUser } from '@/hooks/use-auth'
 import { usePlanProgress } from '@/hooks/use-plan-progress'
 import { ProgressHeader } from '@/components/progress-header'
@@ -13,7 +13,9 @@ import { Users, LogOut } from 'lucide-react'
 
 export default function Page() {
   const { user, logout } = useAuth()
-  const isAdmin = user?.isAdmin ?? false
+
+  const storedAdmin = readStorage<{ username: string } | null>(ADMIN_KEY, null)
+  const isAdmin = (user?.isAdmin ?? false) && user?.username === storedAdmin?.username
   const userId = user?.id ?? 'admin'
   const [showAdmin, setShowAdmin] = useState(false)
 

@@ -4,7 +4,7 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { QUARTERS, type Task } from '@/lib/plan-data'
 import { readStorage, writeStorage, hashPassword, USERS_KEY } from '@/hooks/use-auth'
 import type { StoredUser } from '@/hooks/use-auth'
-import { X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, Plus, Trash2, ChevronDown, ChevronRight, Save } from 'lucide-react'
 
 function generateId(): string {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)
@@ -15,9 +15,16 @@ type AdminPanelProps = {
   onClose: () => void
 }
 
+type EditDraft = {
+  username: string
+  newPassword: string
+  assignedTaskIds: string[]
+}
+
 export function AdminPanel({ open, onClose }: AdminPanelProps) {
   const [users, setUsers] = useState<StoredUser[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<EditDraft | null>(null)
   const [newName, setNewName] = useState('')
   const [newPass, setNewPass] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -27,6 +34,7 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
     if (open) {
       setUsers(readStorage<StoredUser[]>(USERS_KEY, []))
       setEditingId(null)
+      setDraft(null)
       setNewName('')
       setNewPass('')
       setAddError('')
@@ -67,46 +75,68 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
 
   function handleDelete(id: string) {
     if (!confirm('Delete this user? This cannot be undone.')) return
+    if (editingId === id) {
+      setEditingId(null)
+      setDraft(null)
+    }
     persist(users.filter((u) => u.id !== id))
-    if (editingId === id) setEditingId(null)
   }
 
-  function toggleTask(userId: string, taskId: string) {
-    const next = users.map((u) => {
-      if (u.id !== userId) return u
-      const has = u.assignedTaskIds.includes(taskId)
-      return {
-        ...u,
-        assignedTaskIds: has
-          ? u.assignedTaskIds.filter((t) => t !== taskId)
-          : [...u.assignedTaskIds, taskId],
-      }
-    })
-    persist(next)
-  }
-
-  function toggleTaskAll(userId: string, tasks: Task[]) {
+  function startEditing(userId: string) {
     const user = users.find((u) => u.id === userId)
     if (!user) return
-    const allAssigned = tasks.every((t) => user.assignedTaskIds.includes(t.id))
-    const next = users.map((u) => {
-      if (u.id !== userId) return u
-      const without = u.assignedTaskIds.filter((t) => !tasks.find((task) => task.id === t))
-      return {
-        ...u,
-        assignedTaskIds: allAssigned ? without : [...without, ...tasks.map((t) => t.id)],
-      }
+    setEditingId(userId)
+    setDraft({
+      username: user.username,
+      newPassword: '',
+      assignedTaskIds: [...user.assignedTaskIds],
     })
+  }
+
+  function cancelEditing() {
+    setEditingId(null)
+    setDraft(null)
+  }
+
+  async function saveEditing() {
+    if (!editingId || !draft) return
+    const name = draft.username.trim()
+    if (!name) return
+
+    let next = users.map((u) => {
+      if (u.id !== editingId) return u
+      return { ...u, username: name, assignedTaskIds: [...draft.assignedTaskIds] }
+    })
+
+    if (draft.newPassword.trim()) {
+      const hash = await hashPassword(draft.newPassword.trim())
+      next = next.map((u) => (u.id === editingId ? { ...u, passwordHash: hash } : u))
+    }
+
     persist(next)
+    setEditingId(null)
+    setDraft(null)
   }
 
-  async function updatePassword(userId: string, newPassword: string) {
-    const hash = await hashPassword(newPassword)
-    persist(users.map((u) => (u.id === userId ? { ...u, passwordHash: hash } : u)))
+  function toggleDraftTask(taskId: string) {
+    if (!draft) return
+    const has = draft.assignedTaskIds.includes(taskId)
+    setDraft({
+      ...draft,
+      assignedTaskIds: has
+        ? draft.assignedTaskIds.filter((t) => t !== taskId)
+        : [...draft.assignedTaskIds, taskId],
+    })
   }
 
-  async function updateUsername(userId: string, newUsername: string) {
-    persist(users.map((u) => (u.id === userId ? { ...u, username: newUsername } : u)))
+  function toggleDraftTaskAll(tasks: Task[]) {
+    if (!draft) return
+    const allAssigned = tasks.every((t) => draft.assignedTaskIds.includes(t.id))
+    const without = draft.assignedTaskIds.filter((id) => !tasks.find((t) => t.id === id))
+    setDraft({
+      ...draft,
+      assignedTaskIds: allAssigned ? without : [...without, ...tasks.map((t) => t.id)],
+    })
   }
 
   if (!open) return null
@@ -167,7 +197,7 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                 >
                   <button
                     type="button"
-                    onClick={() => setEditingId(isEditing ? null : user.id)}
+                    onClick={() => (isEditing ? cancelEditing() : startEditing(user.id))}
                     className="flex w-full items-center justify-between px-4 py-3 text-left"
                   >
                     <div className="flex items-center gap-2">
@@ -186,26 +216,21 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                     </button>
                   </button>
 
-                  {isEditing && (
+                  {isEditing && draft && (
                     <div className="border-t border-border px-4 py-3">
                       <div className="mb-3 flex gap-2">
                         <input
                           type="text"
-                          defaultValue={user.username}
+                          value={draft.username}
+                          onChange={(e) => setDraft({ ...draft, username: e.target.value })}
                           placeholder="Username"
-                          onBlur={(e) => {
-                            const val = e.target.value.trim()
-                            if (val && val !== user.username) updateUsername(user.id, val)
-                          }}
                           className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
                         />
                         <input
                           type="password"
+                          value={draft.newPassword}
+                          onChange={(e) => setDraft({ ...draft, newPassword: e.target.value })}
                           placeholder="New password"
-                          onBlur={(e) => {
-                            const val = e.target.value.trim()
-                            if (val) updatePassword(user.id, val)
-                          }}
                           className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
                         />
                       </div>
@@ -216,8 +241,8 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                       <div className="flex flex-col gap-3">
                         {QUARTERS.map((quarter) => {
                           const tasks = quarter.tasks
-                          const allChecked = tasks.every((t) => user.assignedTaskIds.includes(t.id))
-                          const someChecked = tasks.some((t) => user.assignedTaskIds.includes(t.id))
+                          const allChecked = tasks.every((t) => draft.assignedTaskIds.includes(t.id))
+                          const someChecked = tasks.some((t) => draft.assignedTaskIds.includes(t.id))
 
                           return (
                             <div key={quarter.id}>
@@ -231,7 +256,7 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                                   {quarter.label}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                  ({user.assignedTaskIds.filter((id) => tasks.find((t) => t.id === id)).length}/{tasks.length})
+                                  ({draft.assignedTaskIds.filter((id) => tasks.find((t) => t.id === id)).length}/{tasks.length})
                                 </span>
                                 <label
                                   onClick={(e) => e.stopPropagation()}
@@ -241,7 +266,7 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                                     type="checkbox"
                                     checked={allChecked}
                                     ref={(el) => { if (el) el.indeterminate = someChecked && !allChecked }}
-                                    onChange={() => toggleTaskAll(user.id, tasks)}
+                                    onChange={() => toggleDraftTaskAll(tasks)}
                                     className="size-3.5 rounded border-input text-primary focus:ring-primary/50"
                                   />
                                   All
@@ -256,8 +281,8 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                                     >
                                       <input
                                         type="checkbox"
-                                        checked={user.assignedTaskIds.includes(task.id)}
-                                        onChange={() => toggleTask(user.id, task.id)}
+                                        checked={draft.assignedTaskIds.includes(task.id)}
+                                        onChange={() => toggleDraftTask(task.id)}
                                         className="size-3.5 rounded border-input text-primary focus:ring-primary/50"
                                       />
                                       <span className="text-sm text-foreground">{task.title}</span>
@@ -268,6 +293,24 @@ export function AdminPanel({ open, onClose }: AdminPanelProps) {
                             </div>
                           )
                         })}
+                      </div>
+
+                      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
+                        <button
+                          type="button"
+                          onClick={saveEditing}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                        >
+                          <Save className="size-4" />
+                          Save Changes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditing}
+                          className="rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   )}
