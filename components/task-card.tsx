@@ -77,10 +77,10 @@ export function TaskCard({ task, done, onToggle }: TaskCardProps) {
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-foreground underline-offset-4 hover:underline"
               >
                 {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                {expanded ? 'Hide steps' : `Show ${task.subSteps.length} step${task.subSteps.length > 1 ? 's' : ''}`}
+                {expanded ? 'Hide steps' : `Show ${task.subSteps.length} step${task.subSteps.length > 1 ? 's' : ''} \u2192`}
               </button>
 
               {expanded && (
