@@ -21,6 +21,22 @@ export default function Page() {
 
   const { done, toggle } = usePlanProgress(userId)
 
+  function countDoneTasks(doneSet: Set<string>, quarters: typeof QUARTERS): number {
+    let count = 0
+    for (const quarter of quarters) {
+      for (const task of quarter.tasks) {
+        if (task.subSteps && task.subSteps.length > 0) {
+          if (task.subSteps.every((_, i) => doneSet.has(`${task.id}::sub::${i}`))) {
+            count++
+          }
+        } else if (doneSet.has(task.id)) {
+          count++
+        }
+      }
+    }
+    return count
+  }
+
   let assignedIds: string[] | undefined
   if (!isAdmin && user) {
     const users = readStorage<StoredUser[]>(USERS_KEY, [])
@@ -36,6 +52,8 @@ export default function Page() {
         ...q,
         tasks: q.tasks.filter((t) => assignedIds?.includes(t.id)),
       })).filter((q) => q.tasks.length > 0)
+
+  const doneTaskCount = countDoneTasks(done, quarters)
 
   return (
     <>
@@ -66,7 +84,7 @@ export default function Page() {
           </div>
         </div>
 
-        <ProgressHeader doneCount={done.size} totalCount={totalTaskCount} />
+        <ProgressHeader doneCount={doneTaskCount} totalCount={totalTaskCount} />
 
         <WeeklyRhythm />
 

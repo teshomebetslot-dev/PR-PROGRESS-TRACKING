@@ -1,7 +1,14 @@
 'use client'
 
-import type { Quarter } from '@/lib/plan-data'
+import type { Quarter, Task } from '@/lib/plan-data'
 import { TaskCard } from '@/components/task-card'
+
+function taskIsDone(task: Task, doneSet: Set<string>): boolean {
+  if (task.subSteps && task.subSteps.length > 0) {
+    return task.subSteps.every((_, i) => doneSet.has(`${task.id}::sub::${i}`))
+  }
+  return doneSet.has(task.id)
+}
 
 type QuarterSectionProps = {
   quarter: Quarter
@@ -10,7 +17,7 @@ type QuarterSectionProps = {
 }
 
 export function QuarterSection({ quarter, done, onToggle }: QuarterSectionProps) {
-  const completed = quarter.tasks.filter((t) => done.has(t.id)).length
+  const completed = quarter.tasks.filter((t) => taskIsDone(t, done)).length
 
   return (
     <section aria-labelledby={`heading-${quarter.id}`} className="flex flex-col gap-4">
@@ -33,7 +40,7 @@ export function QuarterSection({ quarter, done, onToggle }: QuarterSectionProps)
 
       <ul className="flex flex-col gap-3">
         {quarter.tasks.map((task) => (
-          <TaskCard key={task.id} task={task} done={done.has(task.id)} onToggle={onToggle} />
+          <TaskCard key={task.id} task={task} doneSet={done} onToggle={onToggle} />
         ))}
       </ul>
     </section>
